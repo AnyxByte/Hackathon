@@ -21,11 +21,16 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    const user = await User.create({
+    let user = await User.create({
       name,
       email,
       password,
     });
+
+    user = {
+      ...user._doc,
+      password: undefined,
+    };
 
     return res.status(200).json({
       msg: "registered successfully",

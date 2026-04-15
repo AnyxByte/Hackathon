@@ -6,8 +6,8 @@ export const connectDb = async () => {
       dbName: "Hackathon",
     });
     console.log("database connected");
-    // process.exit(1);
   } catch (error) {
     console.log("error connecting to the database");
+    process.exit(1);
   }
 };
