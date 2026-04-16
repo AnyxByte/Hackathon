@@ -6,6 +6,11 @@ const researchSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    sessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      index: true,
+    },
     abstract: { type: String },
     authors: [String],
     year: { type: Number },

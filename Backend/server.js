@@ -24,7 +24,7 @@ app.get("/health", (req, res) => {
 
 //user routes
 app.use("/api/auth", userRouter);
-app.use("/api/v1", auth, queryRouter);
+app.use("/api/v1", queryRouter);
 
 app.listen(port, () => {
   console.log(`server started at port ${port}`);
