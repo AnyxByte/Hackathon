@@ -83,63 +83,89 @@ const keywordScore = (item, intentKeywords, diseaseKeywords) => {
 // ─────────────────────────────────────────────
 // PHASE 1: Fetch from all APIs
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// PHASE 1: Fetch from all APIs (FAULT-TOLERANT)
+// ─────────────────────────────────────────────
 export const testAllEndpoints = async (disease, intent) => {
   const query = `${intent} AND ${disease}`;
 
+  // ⚡ Helper function to prevent one failing API from crashing the others
+  const fetchSafe = (promise, fallbackData, name) =>
+    promise.catch((err) => {
+      console.error(`⚠️ ${name} API Failed: ${err.message}`);
+      return { data: fallbackData }; // Returns empty mock data so the app survives
+    });
+
   try {
     const [pubmedSearch, openAlexRes, trialsRes] = await Promise.all([
-      axios.get(
-        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(
-          query,
-        )}&retmax=15&sort=pub+date&retmode=json`,
+      fetchSafe(
+        axios.get(
+          `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(
+            query,
+          )}&retmax=15&sort=pub+date&retmode=json`,
+        ),
+        { esearchresult: { idlist: [] } },
+        "PubMed Search",
       ),
-      axios.get(
-        `https://api.openalex.org/works?search=${encodeURIComponent(
-          query,
-        )}&per-page=40&sort=relevance_score:desc&select=title,abstract_inverted_index,authorships,publication_year,id`,
+      fetchSafe(
+        axios.get(
+          `https://api.openalex.org/works?search=${encodeURIComponent(
+            query,
+          )}&per-page=40&sort=relevance_score:desc&select=title,abstract_inverted_index,authorships,publication_year,id`,
+        ),
+        { results: [] },
+        "OpenAlex",
       ),
-      axios.get(
-        `https://clinicaltrials.gov/api/v2/studies?query.cond=${encodeURIComponent(
-          disease,
-        )}&query.term=${encodeURIComponent(intent)}&pageSize=20&format=json`,
+      fetchSafe(
+        axios.get(
+          `https://clinicaltrials.gov/api/v2/studies?query.cond=${encodeURIComponent(
+            disease,
+          )}&query.term=${encodeURIComponent(intent)}&pageSize=20&format=json`,
+        ),
+        { studies: [] },
+        "ClinicalTrials",
       ),
     ]);
 
-    const ids = pubmedSearch.data.esearchresult.idlist;
+    const ids = pubmedSearch.data.esearchresult.idlist || [];
     let pubmedPool = [];
 
     if (ids.length > 0) {
-      const fetchRes = await axios.get(
-        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(
-          ",",
-        )}&retmode=xml`,
-      );
-      const parsed = await parseStringPromise(fetchRes.data);
-      const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
+      try {
+        const fetchRes = await axios.get(
+          `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(
+            ",",
+          )}&retmode=xml`,
+        );
+        const parsed = await parseStringPromise(fetchRes.data);
+        const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
 
-      pubmedPool = articles.map((article, i) => {
-        const medline = article?.MedlineCitation?.[0];
-        const articleData = medline?.Article?.[0];
-        const abstractTexts = articleData?.Abstract?.[0]?.AbstractText || [];
-        const authors = (articleData?.AuthorList?.[0]?.Author || [])
-          .slice(0, 3)
-          .map((a) =>
-            `${a.ForeName?.[0] || ""} ${a.LastName?.[0] || ""}`.trim(),
-          )
-          .filter(Boolean);
+        pubmedPool = articles.map((article, i) => {
+          const medline = article?.MedlineCitation?.[0];
+          const articleData = medline?.Article?.[0];
+          const abstractTexts = articleData?.Abstract?.[0]?.AbstractText || [];
+          const authors = (articleData?.AuthorList?.[0]?.Author || [])
+            .slice(0, 3)
+            .map((a) =>
+              `${a.ForeName?.[0] || ""} ${a.LastName?.[0] || ""}`.trim(),
+            )
+            .filter(Boolean);
 
-        return {
-          title: cleanText(articleData?.ArticleTitle?.[0]) || "No Title",
-          abstract: abstractTexts.map(cleanText).join(" ") || "",
-          authors,
-          year:
-            medline?.DateCompleted?.[0]?.Year?.[0] ||
-            medline?.DateRevised?.[0]?.Year?.[0] ||
-            "",
-          source: "PubMed",
-          url: `https://pubmed.ncbi.nlm.nih.gov/${ids[i]}`,
-        };
-      });
+          return {
+            title: cleanText(articleData?.ArticleTitle?.[0]) || "No Title",
+            abstract: abstractTexts.map(cleanText).join(" ") || "",
+            authors,
+            year:
+              medline?.DateCompleted?.[0]?.Year?.[0] ||
+              medline?.DateRevised?.[0]?.Year?.[0] ||
+              "",
+            source: "PubMed",
+            url: `https://pubmed.ncbi.nlm.nih.gov/${ids[i]}`,
+          };
+        });
+      } catch (pubmedFetchErr) {
+        console.error("⚠️ PubMed XML Fetch Failed:", pubmedFetchErr.message);
+      }
     }
 
     const alexPool = (openAlexRes.data.results || []).map((r) => ({
@@ -193,7 +219,7 @@ export const testAllEndpoints = async (disease, intent) => {
     );
     return broadPool;
   } catch (error) {
-    console.error("Fetch Error:", error.message);
+    console.error("Critical Fetch Pipeline Error:", error.message);
     return [];
   }
 };
@@ -297,31 +323,64 @@ export const handleQuery = async (req, res) => {
     console.time("🎯 Phase 2: Keyword Rank");
 
     const stopWords = new Set([
-      "a", "an", "the", "and", "or", "but", "in", "on", "of", "to", "for", "with", "is", "can", "i", "take", "what", "are", "it", "this",
+      "a",
+      "an",
+      "the",
+      "and",
+      "or",
+      "but",
+      "in",
+      "on",
+      "of",
+      "to",
+      "for",
+      "with",
+      "is",
+      "can",
+      "i",
+      "take",
+      "what",
+      "are",
+      "it",
+      "this",
     ]);
 
     // ⚡ Split Intent and Disease into separate arrays for weighted scoring
-    const intentKeywords = [...new Set(intent.toLowerCase().split(/\s+/))].filter((k) => !stopWords.has(k) && k.trim() !== "");
-    const diseaseKeywords = [...new Set(disease.toLowerCase().split(/\s+/))].filter((k) => !stopWords.has(k) && k.trim() !== "");
+    const intentKeywords = [
+      ...new Set(intent.toLowerCase().split(/\s+/)),
+    ].filter((k) => !stopWords.has(k) && k.trim() !== "");
+    const diseaseKeywords = [
+      ...new Set(disease.toLowerCase().split(/\s+/)),
+    ].filter((k) => !stopWords.has(k) && k.trim() !== "");
 
-    const publications = broadPool.filter((item) => item.source !== "ClinicalTrials");
+    const publications = broadPool.filter(
+      (item) => item.source !== "ClinicalTrials",
+    );
     const trials = broadPool.filter((item) => item.source === "ClinicalTrials");
 
     const topPublications = publications
       .filter((item) => item.abstract && item.abstract.length > 30)
-      .map((item) => ({ ...item, _score: keywordScore(item, intentKeywords, diseaseKeywords) }))
+      .map((item) => ({
+        ...item,
+        _score: keywordScore(item, intentKeywords, diseaseKeywords),
+      }))
       .sort((a, b) => b._score - a._score)
       .slice(0, 5);
 
     const topTrials = trials
-      .map((item) => ({ ...item, _score: keywordScore(item, intentKeywords, diseaseKeywords) }))
+      .map((item) => ({
+        ...item,
+        _score: keywordScore(item, intentKeywords, diseaseKeywords),
+      }))
       .sort((a, b) => b._score - a._score)
       .slice(0, 3);
 
     const rankedDocs = [...topPublications, ...topTrials];
 
     console.timeEnd("🎯 Phase 2: Keyword Rank");
-    console.log(`✅ Top docs selected: ${topPublications.length} publications + ${topTrials.length} trials`);
+    console.log(
+      `✅ Top docs selected: ${topPublications.length} publications + ${topTrials.length} trials`,
+    );
 
     Research.insertMany(
       rankedDocs.map(({ _score, ...rest }) => ({
@@ -334,7 +393,10 @@ export const handleQuery = async (req, res) => {
       conversationHistory.length > 0
         ? `PREVIOUS CONTEXT:\n${conversationHistory
             .slice(-4)
-            .map((m) => `${m.role === "user" ? "User" : "CuraLink"}: ${m.content?.slice(0, 150)}`)
+            .map(
+              (m) =>
+                `${m.role === "user" ? "User" : "CuraLink"}: ${m.content?.slice(0, 150)}`,
+            )
             .join("\n")}\n\n`
         : "";
 
@@ -416,7 +478,7 @@ Do NOT output markdown headers, just the plain text paragraph.`;
         $set: { lastDiseaseContext: disease },
         $push: { messages: { $each: [newUserMessage, newAiMessage] } },
       },
-      { upsert: true, returnDocument: 'after' }, // ⚡ Removed the warning
+      { upsert: true, returnDocument: "after" }, // ⚡ Removed the warning
     ).catch((err) => console.error("❌ DB Save Error:", err));
 
     setCache(cacheKey, responsePayload);
