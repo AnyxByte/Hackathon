@@ -1,37 +1,33 @@
 @import "tailwindcss";
 
 @media print {
-  /* 1. Hide the Sidebar, Header, and Input form */
   aside, header, form, .absolute {
     display: none !important;
   }
 
-  /* 2. Remove fixed heights and let the body expand fully */
-  html, body, #root, .h-screen, .h-full {
+  html, body, #root, main, .h-screen, .h-full, .overflow-y-auto, .overflow-hidden {
     height: auto !important;
     min-height: auto !important;
     overflow: visible !important;
+    display: block !important;
     background-color: white !important;
   }
 
-  /* 3. Remove the scrollbars from the main chat wrapper */
-  main, .overflow-y-auto, .overflow-hidden {
-    height: auto !important;
-    overflow: visible !important;
-    display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
+  .flex.gap-3, .flex.gap-6, .flex-1 {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
   }
 
-  /* 4. Remove the huge padding at the bottom where the input box usually sits */
-  .pb-40 {
-    padding-bottom: 20px !important;
-  }
-
-  /* 5. Ensure individual chat bubbles don't get cut exactly in half between pages */
-  .flex.gap-3, .flex.gap-6 {
+  .rounded-2xl, .rounded-xl {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin-bottom: 24px !important;
+  }
+
+  .space-y-8 > :not([hidden]) ~ :not([hidden]),
+  .md\:space-y-12 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 24px !important;
+  }
+  .pb-40 {
+    padding-bottom: 0 !important;
   }
 }
