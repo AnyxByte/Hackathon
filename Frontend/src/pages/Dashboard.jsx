@@ -1,143 +1,213 @@
-// import React, { useState } from 'react';
-import {
-  Search,
-  History,
-  BookOpen,
-  Microscope,
-  MapPin,
-  ExternalLink,
-  Activity,
-  Info,
-  Brain,
-} from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
+import axios from "axios";
+import { User, Bot, Send, MapPin, BookOpen, Loader2 } from "lucide-react";
+
+import { Sidebar } from "../../components/dashboard/Sidebar";
+import TrialCard from "../../components/dashboard/TrialCard";
+import PublicationCard from "../../components/dashboard/Publication";
 
 const Dashboard = () => {
+  const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef(null);
+
+  // react-hook-form setup
+  const { register, handleSubmit, reset, watch } = useForm();
+  const queryValue = watch("query");
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isLoading]);
+
+  const onSubmit = async (data) => {
+    if (!data.query.trim()) return;
+
+    // 1. Add User Message to UI
+    const userMsg = { role: "user", content: data.query, type: "text" };
+    setMessages((prev) => [...prev, userMsg]);
+    reset(); // Clear input
+    setIsLoading(true);
+
+    try {
+      // 2. API Call (Modify URL/Port as per your backend)
+      const response = await axios.post("http://localhost:3000/api/v1/query", {
+        query: data.query,
+        // Optional: Pass context if your backend expects it
+        context: { location: "Toronto, CA", disease: "Parkinson's" },
+      });
+
+      setMessages((prev) => [...prev, response.data]);
+    } catch (error) {
+      console.error("Curalink API Error:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "I encountered an error connecting to the research engine. Please try again.",
+          type: "text",
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="flex h-screen bg-slate-50 pt-16">
-      {/* --- Left Sidebar: Context --- */}
-      <aside className="w-80 bg-white border-r border-slate-200 overflow-y-auto p-6 hidden lg:block">
-        <div className="mb-8">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-            Patient Profile
-          </h3>
-          <div className="p-4 bg-slate-900 rounded-2xl text-white">
-            <p className="text-sm font-medium opacity-70">John Smith</p>
-            <p className="text-lg font-bold">Parkinson's Disease</p>
-            <div className="flex items-center gap-1 mt-2 text-emerald-400 text-xs">
-              <MapPin size={12} /> Toronto, Canada
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-            Research History
-          </h3>
-          <div className="space-y-2">
-            {[
-              "Deep Brain Stimulation",
-              "Vitamin D interaction",
-              "Levodopa efficacy",
-            ].map((q, i) => (
-              <button
-                key={i}
-                className="w-full text-left p-3 rounded-xl text-sm text-slate-600 hover:bg-slate-100 transition-all flex items-center gap-2"
-              >
-                <History size={14} /> {q}
-              </button>
-            ))}
-          </div>
-        </div>
-      </aside>
-
-      {/* --- Main Chat/Reasoning Area --- */}
-      <main className="flex-1 flex flex-col min-w-0 bg-white">
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
-          {/* AI Response Example */}
-          <div className="max-w-3xl mx-auto">
-            <div className="flex gap-4 mb-4">
-              <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Microscope size={20} />
-              </div>
-              <div className="space-y-4">
-                <h2 className="text-2xl font-bold text-slate-900">
-                  Deep Brain Stimulation (DBS) Insights
-                </h2>
-                <div className="prose prose-slate max-w-none text-slate-600">
-                  <p>
-                    Based on 124 studies retrieved, DBS shows a{" "}
-                    <strong>60% reduction</strong> in motor fluctuations in
-                    patients with Parkinson's. In Toronto, 3 active Phase III
-                    trials are evaluating new electrode placements...
-                  </p>
-                </div>
-
-                {/* Thinking/Pipeline Visualization */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex gap-6 overflow-x-auto">
-                  <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-white px-3 py-2 rounded-lg border border-emerald-100 whitespace-nowrap">
-                    <Search size={14} /> Expanded Query
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-white px-3 py-2 rounded-lg border border-blue-100 whitespace-nowrap">
-                    <Activity size={14} /> 300+ Sources Scanned
-                  </div>
-                  <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 bg-white px-3 py-2 rounded-lg border border-indigo-100 whitespace-nowrap">
-                    <Brain size={14} /> Reasoning Complete
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Input Area */}
-        <div className="p-6 border-t border-slate-200">
-          <div className="max-w-3xl mx-auto relative">
-            <input
-              type="text"
-              placeholder="Ask about treatments, trials, or researchers..."
-              className="w-full pl-6 pr-16 py-4 bg-slate-100 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+    <div className="flex h-screen bg-[#F9FAFB] text-slate-900 font-sans">
+      <Sidebar />
+      <main className="flex-1 flex flex-col h-full relative overflow-hidden">
+        {/* Header */}
+        <header className="h-14 border-b border-slate-200 flex items-center justify-between px-6 bg-white/80 backdrop-blur-md z-20">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full ${isLoading ? "bg-orange-400 animate-pulse" : "bg-emerald-500"}`}
             />
-            <button className="absolute right-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white p-2 rounded-xl hover:bg-slate-800 transition-all">
-              <Search size={20} />
-            </button>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              {isLoading
+                ? "Curalink is reasoning..."
+                : "Curalink Engine Active"}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-bold border border-slate-200 flex items-center gap-1">
+              <MapPin size={10} /> Toronto, CA
+            </span>
+          </div>
+        </header>
+
+        {/* Chat Feed */}
+        <div className="flex-1 overflow-y-auto pt-8 pb-40">
+          <div className="max-w-4xl mx-auto px-6 space-y-12">
+            {messages.length === 0 && (
+              <div className="h-[50vh] flex flex-col items-center justify-center text-center space-y-4">
+                <div className="p-4 bg-emerald-50 rounded-full text-emerald-600">
+                  <Bot size={40} />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800">
+                  How can I assist your research?
+                </h2>
+                <p className="text-slate-500 max-w-sm text-sm">
+                  Ask about clinical trials, latest publications, or specific
+                  disease treatments.
+                </p>
+              </div>
+            )}
+
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex gap-6 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+              >
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-sm shrink-0 ${
+                    msg.role === "assistant"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-white border border-slate-200 text-slate-600"
+                  }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <Bot size={20} />
+                  ) : (
+                    <User size={20} />
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-6">
+                  {msg.type === "structured_report" ? (
+                    <div className="space-y-6">
+                      <section className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+                        <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                          <BookOpen size={16} className="text-emerald-600" />{" "}
+                          Condition Overview
+                        </h3>
+                        <p className="text-sm text-slate-600 leading-relaxed italic border-l-2 border-emerald-100 pl-4">
+                          "{msg.overview}"
+                        </p>
+                      </section>
+
+                      <section>
+                        <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1">
+                          Top Research Publications
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {msg.publications?.map((pub, i) => (
+                            <PublicationCard key={i} pub={pub} />
+                          ))}
+                        </div>
+                      </section>
+
+                      {msg.trials && (
+                        <section>
+                          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1">
+                            Relevant Clinical Trials
+                          </h3>
+                          <div className="space-y-3">
+                            {msg.trials.map((trial, i) => (
+                              <TrialCard key={i} trial={trial} />
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      className={`${msg.role === "user" ? "bg-emerald-50 border-emerald-100 ml-auto" : "bg-white border-slate-200"} border p-5 rounded-2xl text-slate-800 shadow-sm max-w-[90%]`}
+                    >
+                      <p className="text-sm leading-relaxed">{msg.content}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Loading Indicator */}
+            {isLoading && (
+              <div className="flex gap-6">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                  <Loader2 size={20} className="animate-spin" />
+                </div>
+                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                  <div className="flex gap-2">
+                    <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" />
+                    <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-2 h-2 bg-slate-300 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={scrollRef} />
+          </div>
+        </div>
+
+        {/* Input Form */}
+        <div className="absolute bottom-0 left-0 w-full bg-linear-to-t from-slate-50 via-slate-50 to-transparent pb-6 pt-12">
+          <div className="max-w-3xl mx-auto px-4">
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 focus-within:ring-2 ring-emerald-500/20 transition-all flex items-center gap-2 px-2"
+            >
+              <input
+                {...register("query")}
+                type="text"
+                autoComplete="off"
+                className="flex-1 py-3 px-2 outline-none text-sm"
+                placeholder="Ask about treatments, dosages, or trial eligibility..."
+              />
+              <button
+                type="submit"
+                disabled={isLoading || !queryValue}
+                className="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-emerald-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-lg"
+              >
+                <Send size={18} />
+              </button>
+            </form>
           </div>
         </div>
       </main>
-
-      {/* --- Right Sidebar: Sources --- */}
-      <aside className="w-96 bg-slate-50 border-l border-slate-200 overflow-y-auto p-6 hidden xl:block">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-          Cited Research & Trials
-        </h3>
-        <div className="space-y-4">
-          {[1, 2, 3].map((_, i) => (
-            <div
-              key={i}
-              className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase">
-                  Publication
-                </span>
-                <ExternalLink
-                  size={14}
-                  className="text-slate-300 group-hover:text-emerald-500 cursor-pointer"
-                />
-              </div>
-              <h4 className="text-sm font-bold text-slate-900 mb-1 leading-snug">
-                Long-term Efficacy of Subthalamic Nucleus Stimulation
-              </h4>
-              <p className="text-xs text-slate-500 mb-3">
-                Lim et al. • 2024 • PubMed
-              </p>
-              <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400 italic bg-slate-50 p-2 rounded-lg">
-                <Info size={10} /> "...DBS improved motor function scores by
-                12.4 points compared to baseline..."
-              </div>
-            </div>
-          ))}
-        </div>
-      </aside>
     </div>
   );
 };

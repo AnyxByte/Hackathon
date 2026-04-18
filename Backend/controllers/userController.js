@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, location } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -25,6 +25,7 @@ export const registerUser = async (req, res) => {
       name,
       email,
       password,
+      location,
     });
 
     user = {
@@ -32,9 +33,16 @@ export const registerUser = async (req, res) => {
       password: undefined,
     };
 
+    const token = jwt.sign({ user }, process.env.JWT_SECRET, {
+      expiresIn: "2d",
+    });
+
+    res.cookie("token", token);
+
     return res.status(200).json({
       msg: "registered successfully",
       user,
+      token,
     });
   } catch (error) {
     console.log("error at registerUser", error);

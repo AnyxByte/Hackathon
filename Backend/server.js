@@ -4,12 +4,23 @@ import dotenv from "dotenv";
 import userRouter from "./routes/userRoutes.js";
 import queryRouter from "./routes/queryRoutes.js";
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import { auth } from "./middlewares/auth.js";
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+console.log("client-url", process.env.CLIENT_URL);
+
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    credentials: true,
+  }),
+);
 
 app.use(express.json());
 app.use(cookieParser());
