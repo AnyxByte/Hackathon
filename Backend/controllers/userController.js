@@ -103,3 +103,38 @@ export const loginUser = async (req, res) => {
     });
   }
 };
+
+export const updateUser = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const { name, location } = req.body;
+
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (location) updateData.location = location;
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+    });
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully!",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update User Error:", error);
+
+    res.status(500).json({
+      msg: "An error occurred while updating the profile.",
+      error: error.message,
+    });
+  }
+};

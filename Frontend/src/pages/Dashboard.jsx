@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { Bot, Loader2 } from "lucide-react";
 import Cookies from "js-cookie";
-
 import { Sidebar } from "../../components/dashboard/Sidebar";
 import { useChat } from "../../context/HistoryContext";
 import Header from "../../components/dashboard/Header";
@@ -21,6 +20,7 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const scrollRef = useRef(null);
+  const apiUrl = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -49,15 +49,15 @@ const Dashboard = () => {
       setChatHistory((prev) => [
         {
           sessionId: currentSessionId,
-          lastDiseaseContext: "Extracting topic...", // Temporary title
+          lastDiseaseContext: "Extracting topic...",
         },
-        ...prev, // Keep the older chats below it
+        ...prev,
       ]);
     }
 
     try {
       const response = await axios.post(
-        "http://localhost:3000/api/v1/query",
+        `${apiUrl}/v1/query`,
         {
           query: queryText,
           conversationHistory: historyPayload,

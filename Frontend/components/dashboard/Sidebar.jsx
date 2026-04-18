@@ -1,12 +1,19 @@
-import React from "react";
-import { Plus, MessageSquare, Settings, X } from "lucide-react"; // Added X icon
+import React, { useState } from "react";
+import { Plus, MessageSquare, Settings, X } from "lucide-react";
 import { useChat } from "../../context/HistoryContext";
+import UserProfileModal from "./UserProfile";
+import Cookies from "js-cookie";
+import axios from "axios";
+import toast from "react-hot-toast";
 
 export const Sidebar = ({ isOpen, setIsOpen }) => {
   const { chatHistory, loadSpecificChat, createNewChat, currentSessionId } =
     useChat();
 
-  // Helper functions to auto-close the sidebar on mobile after making a selection
+  const user = JSON.parse(localStorage.getItem("user"));
+
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
   const handleNewChat = () => {
     createNewChat();
     setIsOpen(false);
@@ -17,9 +24,30 @@ export const Sidebar = ({ isOpen, setIsOpen }) => {
     setIsOpen(false);
   };
 
+  const handleSaveProfile = async (updatedData) => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    const data = {
+      name: updatedData.firstName + " " + updatedData.lastName,
+      location: updatedData.location,
+    };
+
+    try {
+      const token = Cookies.get("token");
+      const response = await axios.put(`${apiUrl}/auth/update`, data, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      console.log("Profile Saved!", response.data);
+      localStorage.setItem("user", JSON.stringify(response.data?.user));
+      toast.success("Profile Updated!")
+    } catch (error) {
+      toast.error("Error Updating Profile!")
+      console.error("Failed to update profile:", error);
+    }
+  };
+
   return (
     <>
-      {/* ⚡ Mobile Backdrop Overlay */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
@@ -27,7 +55,6 @@ export const Sidebar = ({ isOpen, setIsOpen }) => {
         />
       )}
 
-      {/* Sidebar Container */}
       <aside
         className={`fixed md:relative inset-y-0 left-0 z-50 w-64 bg-slate-900 flex flex-col h-full transform transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
         ${isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
@@ -90,15 +117,30 @@ export const Sidebar = ({ isOpen, setIsOpen }) => {
         </div>
 
         <div className="p-3 border-t border-slate-800 mt-auto bg-slate-900/50">
-          <div className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-300 hover:bg-slate-800 cursor-pointer transition-colors">
+          <div
+            onClick={() => setIsProfileOpen(true)} // ⚡ Triggers the modal
+            className="flex items-center gap-3 px-3 py-3 rounded-lg text-slate-300 hover:bg-slate-800 cursor-pointer transition-colors group"
+          >
             <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-bold text-white shadow-inner shrink-0">
               SB
             </div>
-            <span className="text-sm font-medium truncate">Suprodip B.</span>
-            <Settings size={16} className="ml-auto text-slate-500 shrink-0" />
+            <span className="text-sm font-medium truncate group-hover:text-white transition-colors">
+              {user?.name?.split(" ")[0] || "Unknown"}
+            </span>
+            <Settings
+              size={16}
+              className="ml-auto text-slate-500 group-hover:text-slate-300 transition-colors shrink-0"
+            />
           </div>
         </div>
       </aside>
+
+      {/* ⚡ Render the Modal outside the sidebar flow */}
+      <UserProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        onSave={handleSaveProfile}
+      />
     </>
   );
 };

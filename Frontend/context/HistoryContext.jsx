@@ -6,7 +6,6 @@ const ChatContext = createContext();
 export const useChat = () => useContext(ChatContext);
 
 export const ChatProvider = ({ children }) => {
-  // --- STATE ---
   const [chatHistory, setChatHistory] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
@@ -14,18 +13,16 @@ export const ChatProvider = ({ children }) => {
     crypto.randomUUID(),
   );
   const [messages, setMessages] = useState([]);
+  const apiUrl = import.meta.env.VITE_API_URL;
 
   const fetchChatHistory = async () => {
     setIsHistoryLoading(true);
     try {
-      const response = await axios.get(
-        "http://localhost:3000/api/v1/fetchHistory",
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+      const response = await axios.get(`${apiUrl}/v1/fetchHistory`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
-      );
+      });
 
       const sortedHistory = response.data.history.sort(
         (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
@@ -70,7 +67,7 @@ export const ChatProvider = ({ children }) => {
         fetchChatHistory,
         loadSpecificChat,
         createNewChat,
-        setChatHistory
+        setChatHistory,
       }}
     >
       {children}

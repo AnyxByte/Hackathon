@@ -19,6 +19,7 @@ export const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const apiUrl = import.meta.env.VITE_API_URL;
 
   // Initialize React Hook Form
   const {
@@ -32,7 +33,7 @@ export const Auth = () => {
 
   const onSubmit = async (data) => {
     setLoading(true);
-    const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register";
+    const endpoint = isLogin ? "/auth/login" : "/auth/register";
 
     if (!isLogin) {
       data = {
@@ -42,10 +43,7 @@ export const Auth = () => {
     }
 
     try {
-      const response = await axios.post(
-        `http://localhost:3000${endpoint}`,
-        data,
-      );
+      const response = await axios.post(`${apiUrl}${endpoint}`, data);
 
       toast.success(
         isLogin ? "Welcome back!" : "Account created successfully!",
@@ -55,7 +53,7 @@ export const Auth = () => {
       localStorage.setItem("token", response.data.token);
       Cookies.set("token", response.data.token);
 
-      // Redirect to dashboard after a short delay
+      localStorage.setItem("user", JSON.stringify(response.data.user));
       setTimeout(() => navigate("/dashboard"), 1500);
     } catch (error) {
       const message =
