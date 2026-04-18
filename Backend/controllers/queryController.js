@@ -3,6 +3,13 @@ import Research from "../models/researchModel.js";
 import Conversation from "../models/conversationModel.js";
 import mongoose from "mongoose";
 import { parseStringPromise } from "xml2js";
+import { HfInference } from "@huggingface/inference";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// Initialize Hugging Face Client
+const hf = new HfInference(process.env.HUGGINGFACE_TOKEN);
 
 // ─────────────────────────────────────────────
 // IN-MEMORY CACHE (30 min TTL)
@@ -40,66 +47,72 @@ const cleanText = (textData) => {
 };
 
 // ─────────────────────────────────────────────
-// BM25-STYLE KEYWORD SCORER (replaces Ollama embeddings)
-// Runs in <5ms, no network call needed
+// BM25-STYLE KEYWORD SCORER
 // ─────────────────────────────────────────────
-const keywordScore = (item, keywords) => {
+// ─────────────────────────────────────────────
+// BM25-STYLE KEYWORD SCORER (UPGRADED)
+// ─────────────────────────────────────────────
+const keywordScore = (item, intentKeywords, diseaseKeywords) => {
   const titleText = item.title?.toLowerCase() || "";
   const abstractText = item.abstract?.toLowerCase() || "";
 
   let score = 0;
-  for (const kw of keywords) {
-    // Title matches count 3x more than abstract matches
+
+  // ⚡ INTENT words get a massive 5x multiplier!
+  for (const kw of intentKeywords) {
     const titleMatches = (titleText.match(new RegExp(kw, "g")) || []).length;
-    const abstractMatches = (abstractText.match(new RegExp(kw, "g")) || []).length;
+    const abstractMatches = (abstractText.match(new RegExp(kw, "g")) || [])
+      .length;
+    score += (titleMatches * 3 + abstractMatches) * 5;
+  }
+
+  // Disease words get standard scoring
+  for (const kw of diseaseKeywords) {
+    const titleMatches = (titleText.match(new RegExp(kw, "g")) || []).length;
+    const abstractMatches = (abstractText.match(new RegExp(kw, "g")) || [])
+      .length;
     score += titleMatches * 3 + abstractMatches;
   }
 
-  // Recency boost: +1 per year after 2015, capped at +10
   const recency = item.year
     ? Math.min(10, Math.max(0, parseInt(item.year) - 2015))
     : 0;
-
   return score * 10 + recency;
 };
 
 // ─────────────────────────────────────────────
-// PHASE 1: Fetch from all 3 APIs in parallel
+// PHASE 1: Fetch from all APIs
 // ─────────────────────────────────────────────
 export const testAllEndpoints = async (disease, intent) => {
   const query = `${intent} AND ${disease}`;
 
   try {
-    // All 3 API calls fire at the same time
     const [pubmedSearch, openAlexRes, trialsRes] = await Promise.all([
       axios.get(
         `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(
-          query
-        )}&retmax=40&sort=pub+date&retmode=json`
+          query,
+        )}&retmax=15&sort=pub+date&retmode=json`,
       ),
       axios.get(
         `https://api.openalex.org/works?search=${encodeURIComponent(
-          query
-        )}&per-page=40&sort=relevance_score:desc&select=title,abstract_inverted_index,authorships,publication_year,id`
+          query,
+        )}&per-page=40&sort=relevance_score:desc&select=title,abstract_inverted_index,authorships,publication_year,id`,
       ),
       axios.get(
         `https://clinicaltrials.gov/api/v2/studies?query.cond=${encodeURIComponent(
-          disease
-        )}&query.term=${encodeURIComponent(
-          intent
-        )}&pageSize=20&format=json`
+          disease,
+        )}&query.term=${encodeURIComponent(intent)}&pageSize=20&format=json`,
       ),
     ]);
 
-    // ── PubMed: 2nd call (fetch details) runs after search IDs arrive ──
     const ids = pubmedSearch.data.esearchresult.idlist;
     let pubmedPool = [];
 
     if (ids.length > 0) {
       const fetchRes = await axios.get(
         `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(
-          ","
-        )}&retmode=xml`
+          ",",
+        )}&retmode=xml`,
       );
       const parsed = await parseStringPromise(fetchRes.data);
       const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
@@ -107,18 +120,16 @@ export const testAllEndpoints = async (disease, intent) => {
       pubmedPool = articles.map((article, i) => {
         const medline = article?.MedlineCitation?.[0];
         const articleData = medline?.Article?.[0];
-        const abstractTexts =
-          articleData?.Abstract?.[0]?.AbstractText || [];
+        const abstractTexts = articleData?.Abstract?.[0]?.AbstractText || [];
         const authors = (articleData?.AuthorList?.[0]?.Author || [])
           .slice(0, 3)
           .map((a) =>
-            `${a.ForeName?.[0] || ""} ${a.LastName?.[0] || ""}`.trim()
+            `${a.ForeName?.[0] || ""} ${a.LastName?.[0] || ""}`.trim(),
           )
           .filter(Boolean);
 
         return {
-          title:
-            cleanText(articleData?.ArticleTitle?.[0]) || "No Title",
+          title: cleanText(articleData?.ArticleTitle?.[0]) || "No Title",
           abstract: abstractTexts.map(cleanText).join(" ") || "",
           authors,
           year:
@@ -131,7 +142,6 @@ export const testAllEndpoints = async (disease, intent) => {
       });
     }
 
-    // ── OpenAlex ──
     const alexPool = (openAlexRes.data.results || []).map((r) => ({
       title: r.title || "No Title",
       abstract: reconstructAbstract(r.abstract_inverted_index),
@@ -144,13 +154,10 @@ export const testAllEndpoints = async (disease, intent) => {
       url: r.id || "",
     }));
 
-    // ── ClinicalTrials ──
     const trialPool = (trialsRes.data.studies || []).map((s) => {
       const proto = s.protocolSection;
-      const contacts =
-        proto?.contactsLocationsModule?.centralContacts || [];
-      const locations =
-        proto?.contactsLocationsModule?.locations || [];
+      const contacts = proto?.contactsLocationsModule?.centralContacts || [];
+      const locations = proto?.contactsLocationsModule?.locations || [];
       const eligibility = proto?.eligibilityModule;
 
       return {
@@ -160,9 +167,7 @@ export const testAllEndpoints = async (disease, intent) => {
           "No Title",
         abstract: proto?.descriptionModule?.briefSummary || "",
         authors: [],
-        year:
-          proto?.statusModule?.startDateStruct?.date?.split("-")[0] ||
-          "",
+        year: proto?.statusModule?.startDateStruct?.date?.split("-")[0] || "",
         source: "ClinicalTrials",
         url: `https://clinicaltrials.gov/study/${proto?.identificationModule?.nctId}`,
         status: proto?.statusModule?.overallStatus || "Unknown",
@@ -175,8 +180,7 @@ export const testAllEndpoints = async (disease, intent) => {
           ? `${contacts[0].name || "N/A"} | ${contacts[0].email || "N/A"} | ${contacts[0].phone || "N/A"}`
           : "Not available",
         eligibilityCriteria:
-          eligibility?.eligibilityCriteria?.slice(0, 500) ||
-          "Not specified",
+          eligibility?.eligibilityCriteria?.slice(0, 500) || "Not specified",
         minAge: eligibility?.minimumAge || "N/A",
         maxAge: eligibility?.maximumAge || "N/A",
         sex: eligibility?.sex || "All",
@@ -185,7 +189,7 @@ export const testAllEndpoints = async (disease, intent) => {
 
     const broadPool = [...pubmedPool, ...alexPool, ...trialPool];
     console.log(
-      `✅ Fetched: ${pubmedPool.length} PubMed | ${alexPool.length} OpenAlex | ${trialPool.length} Trials = ${broadPool.length} total`
+      `✅ Fetched: ${pubmedPool.length} PubMed | ${alexPool.length} OpenAlex | ${trialPool.length} Trials = ${broadPool.length} total`,
     );
     return broadPool;
   } catch (error) {
@@ -199,19 +203,73 @@ export const testAllEndpoints = async (disease, intent) => {
 // ─────────────────────────────────────────────
 export const handleQuery = async (req, res) => {
   const startTime = Date.now();
+  const userId = req.user._id;
 
   try {
-    const { disease, intent, conversationHistory = [] } = req.body;
+    const { query, conversationHistory = [], sessionId } = req.body;
 
-    if (!disease || !intent) {
-      return res
-        .status(400)
-        .json({ msg: "disease and intent are required." });
+    if (!query) {
+      return res.status(400).json({ msg: "query is required." });
     }
 
-    console.log(`\n🚀 Query: "${intent}" | Disease: "${disease}"`);
+    console.log(`\n🚀 Raw User Input: "${query}"`);
 
-    // ── Cache check ──
+    // ─────────────────────────────────────────────
+    // 🧠 PHASE 0: NLP Query Extraction
+    // ─────────────────────────────────────────────
+    console.time("🧠 Phase 0: Extraction");
+
+    const recentHistory = conversationHistory
+      .slice(-3)
+      .map((m) => `${m.role === "user" ? "User" : "CuraLink"}: ${m.content}`)
+      .join("\n");
+
+    const extractionPrompt = `You are a strict medical data extractor. 
+    
+    Recent Conversation History:
+    ${recentHistory || "None"}
+
+    Current User Query: "${query}"
+    
+    Task:
+    1. Identify the primary disease/condition being discussed. (If none, return "General").
+    2. Identify the specific subject/focus of the query (e.g., exact drug names, supplements, procedures, or specific symptoms). 
+    CRITICAL: DO NOT categorize the intent (e.g., never output generic words like "treatment" or "drug"). Extract the actual specific words the user typed.
+    
+    RESPOND STRICTLY WITH ONLY A RAW JSON OBJECT. No markdown, no backticks, no explanations.
+    
+    Example Input: "Can I take Vitamin D in lung cancer?"
+    Example Output: {"disease": "lung cancer", "intent": "Vitamin D"}
+    
+    Example Input: "What are the side effects of chemotherapy?"
+    Example Output: {"disease": "General", "intent": "chemotherapy side effects"}
+    `;
+
+    let disease = "General";
+    let intent = query;
+
+    try {
+      const extractRes = await hf.chatCompletion({
+        model: "meta-llama/Meta-Llama-3-8B-Instruct",
+        messages: [{ role: "user", content: extractionPrompt }],
+        max_tokens: 50,
+        temperature: 0.1,
+      });
+
+      const rawText = extractRes.choices[0]?.message?.content
+        .replace(/```json|```/g, "")
+        .trim();
+      const extractedData = JSON.parse(rawText);
+
+      disease = extractedData.disease || "General";
+      intent = extractedData.intent || query;
+    } catch (e) {
+      console.error("Extraction failed, falling back to raw query.", e.message);
+    }
+
+    console.log(`✅ Extracted -> Disease: "${disease}" | Intent: "${intent}"`);
+    console.timeEnd("🧠 Phase 0: Extraction");
+
     const cacheKey = getCacheKey(disease, intent);
     if (queryCache.has(cacheKey)) {
       console.log("⚡ Cache hit — returning instantly");
@@ -222,9 +280,9 @@ export const handleQuery = async (req, res) => {
       });
     }
 
-    const currentSessionId = new mongoose.Types.ObjectId();
+    const currentSessionId =
+      sessionId || new mongoose.Types.ObjectId().toString();
 
-    // ── PHASE 1: Fetch all APIs ──
     console.time("📥 Phase 1: API Fetch");
     const broadPool = await testAllEndpoints(disease, intent);
     console.timeEnd("📥 Phase 1: API Fetch");
@@ -233,125 +291,92 @@ export const handleQuery = async (req, res) => {
       return res.status(404).json({ msg: "No results found." });
     }
 
+    // ─────────────────────────────────────────────
+    // 🎯 PHASE 2: Upgraded Keyword Rank
+    // ─────────────────────────────────────────────
     console.time("🎯 Phase 2: Keyword Rank");
 
-    const keywords = [
-      ...new Set([
-        ...disease.toLowerCase().split(/\s+/),
-        ...intent.toLowerCase().split(/\s+/),
-      ]),
-    ].filter((k) => k.length > 2); // skip stop words like "a", "of"
+    const stopWords = new Set([
+      "a", "an", "the", "and", "or", "but", "in", "on", "of", "to", "for", "with", "is", "can", "i", "take", "what", "are", "it", "this",
+    ]);
 
-    const publications = broadPool.filter(
-      (item) => item.source !== "ClinicalTrials"
-    );
-    const trials = broadPool.filter(
-      (item) => item.source === "ClinicalTrials"
-    );
+    // ⚡ Split Intent and Disease into separate arrays for weighted scoring
+    const intentKeywords = [...new Set(intent.toLowerCase().split(/\s+/))].filter((k) => !stopWords.has(k) && k.trim() !== "");
+    const diseaseKeywords = [...new Set(disease.toLowerCase().split(/\s+/))].filter((k) => !stopWords.has(k) && k.trim() !== "");
 
-    // Score and rank each group independently
+    const publications = broadPool.filter((item) => item.source !== "ClinicalTrials");
+    const trials = broadPool.filter((item) => item.source === "ClinicalTrials");
+
     const topPublications = publications
       .filter((item) => item.abstract && item.abstract.length > 30)
-      .map((item) => ({ ...item, _score: keywordScore(item, keywords) }))
+      .map((item) => ({ ...item, _score: keywordScore(item, intentKeywords, diseaseKeywords) }))
       .sort((a, b) => b._score - a._score)
-      .slice(0, 5); // top 5 publications
+      .slice(0, 5);
 
     const topTrials = trials
-      .map((item) => ({ ...item, _score: keywordScore(item, keywords) }))
+      .map((item) => ({ ...item, _score: keywordScore(item, intentKeywords, diseaseKeywords) }))
       .sort((a, b) => b._score - a._score)
-      .slice(0, 3); // top 3 trials
+      .slice(0, 3);
 
     const rankedDocs = [...topPublications, ...topTrials];
 
     console.timeEnd("🎯 Phase 2: Keyword Rank");
-    console.log(
-      `✅ Top docs selected: ${topPublications.length} publications + ${topTrials.length} trials`
-    );
+    console.log(`✅ Top docs selected: ${topPublications.length} publications + ${topTrials.length} trials`);
 
     Research.insertMany(
       rankedDocs.map(({ _score, ...rest }) => ({
         ...rest,
         sessionId: currentSessionId,
-      }))
+      })),
     ).catch((err) => console.error("Background DB save error:", err));
-
-    if (conversationHistory.length > 0) {
-      Conversation.findOneAndUpdate(
-        { sessionId: currentSessionId },
-        { $push: { messages: { $each: conversationHistory } } },
-        { upsert: true }
-      ).catch(() => {});
-    }
 
     const conversationContext =
       conversationHistory.length > 0
         ? `PREVIOUS CONTEXT:\n${conversationHistory
             .slice(-4)
-            .map(
-              (m) =>
-                `${m.role === "user" ? "User" : "CuraLink"}: ${m.content?.slice(0, 150)}`
-            )
+            .map((m) => `${m.role === "user" ? "User" : "CuraLink"}: ${m.content?.slice(0, 150)}`)
             .join("\n")}\n\n`
         : "";
 
-    const context = rankedDocs
+    const docContext = rankedDocs
       .map(
         (doc, i) =>
           `[Source ${i + 1}]
 Title: ${doc.title}
 Year: ${doc.year || "N/A"} | Source: ${doc.source} | Authors: ${doc.authors?.join(", ") || "N/A"}
 Abstract: ${doc.abstract?.slice(0, 300)}
-URL: ${doc.url}${doc.status ? `\nStatus: ${doc.status}` : ""}${doc.location ? ` | Location: ${doc.location}` : ""}${doc.contact ? `\nContact: ${doc.contact}` : ""}${doc.eligibilityCriteria ? `\nEligibility: ${doc.eligibilityCriteria?.slice(0, 200)}` : ""}`
+URL: ${doc.url}${doc.status ? `\nStatus: ${doc.status}` : ""}${doc.location ? ` | Location: ${doc.location}` : ""}${doc.contact ? `\nContact: ${doc.contact}` : ""}${doc.eligibilityCriteria ? `\nEligibility: ${doc.eligibilityCriteria?.slice(0, 200)}` : ""}`,
       )
       .join("\n\n---\n\n");
 
+    // ⚡ ADDED CRITICAL ESCAPE HATCH TO PROMPT
     const finalPrompt = `You are CuraLink, an expert Medical Research AI.
 ${conversationContext}Patient Disease: ${disease}
 Research Query: ${intent}
 
-STRICT RULES:
-- Use ONLY the provided sources below
-- Cite every claim with [Source X]
-- Never hallucinate
-- Skip sources irrelevant to ${disease}
-
 SOURCES:
-${context}
+${docContext}
 
-RESPOND IN THIS EXACT FORMAT:
+TASK:
+Based ONLY on the sources above, write a concise, expert 3-4 sentence medical overview answering the user's specific query.
+CRITICAL RULE: If the exact answer (e.g., a specific dosage, side effect, or location) is NOT found in the provided sources, you MUST explicitly state "The retrieved research does not specify [X]." Do not repeat general information to fill space.
+Do NOT list out the publications or trials. Just provide the analytical summary and cite your claims like [Source 1].
+Do NOT output markdown headers, just the plain text paragraph.`;
 
-## Condition Overview
-[2-3 sentences about ${disease} from the sources]
-
-## Key Research Insights
-[4-5 bullet points with [Source X] citations]
-
-## Clinical Trial Opportunities
-[Each trial: Name | Status | Location | Contact | Eligibility summary]
-[If none relevant: "No relevant trials found in current results."]
-
-## Summary
-[2-3 sentences key takeaway]
-
-## Disclaimer
-For research purposes only. Always consult a qualified healthcare professional.`;
-
-    // ── PHASE 6: LLM Generation (qwen2.5:3b — 5x faster than llama3.2) ──
+    // ─────────────────────────────────────────────
+    // ✍️ PHASE 6: LLM Generation
+    // ─────────────────────────────────────────────
     console.time("✍️ Phase 6: LLM");
 
-    const llmRes = await axios.post(
-      "http://localhost:11434/api/generate",
-      {
-        model: "qwen2.5:3b",
-        prompt: finalPrompt,
-        stream: false,
-        options: {
-          temperature: 0.2, // keep responses factual
-          num_predict: 400, // capped for speed (was 700)
-          top_p: 0.8,
-        },
-      }
-    );
+    const chatCompletion = await hf.chatCompletion({
+      model: "meta-llama/Meta-Llama-3-8B-Instruct",
+      messages: [{ role: "user", content: finalPrompt }],
+      max_tokens: 300,
+      temperature: 0.2,
+    });
+
+    const llmText =
+      chatCompletion.choices[0]?.message?.content || "Analysis complete.";
 
     console.timeEnd("✍️ Phase 6: LLM");
 
@@ -359,16 +384,40 @@ For research purposes only. Always consult a qualified healthcare professional.`
     console.log(`\n🎯 TOTAL: ${elapsed}s`);
 
     const responsePayload = {
-      msg: "Medical Research Analysis Complete",
       sessionId: currentSessionId,
-      timeTaken: `${elapsed}s`,
-      summary: llmRes.data.response,
-      publications: topPublications.map(
-        ({ _score, __v, ...rest }) => rest
-      ),
+      role: "assistant",
+      type: "structured_report",
+      overview: llmText.trim(),
+      publications: topPublications.map(({ _score, __v, ...rest }) => rest),
       trials: topTrials.map(({ _score, __v, ...rest }) => rest),
-      sources: rankedDocs.map(({ _score, __v, ...rest }) => rest),
     };
+
+    // ─────────────────────────────────────────────
+    // 💾 AUTO-SAVE TO MONGODB
+    // ─────────────────────────────────────────────
+    const newUserMessage = {
+      role: "user",
+      type: "text",
+      content: query,
+    };
+
+    const newAiMessage = {
+      role: "assistant",
+      type: "structured_report",
+      content: llmText.trim(),
+      publications: responsePayload.publications,
+      trials: responsePayload.trials,
+    };
+
+    Conversation.findOneAndUpdate(
+      { sessionId: currentSessionId },
+      {
+        $setOnInsert: { userId: userId },
+        $set: { lastDiseaseContext: disease },
+        $push: { messages: { $each: [newUserMessage, newAiMessage] } },
+      },
+      { upsert: true, returnDocument: 'after' }, // ⚡ Removed the warning
+    ).catch((err) => console.error("❌ DB Save Error:", err));
 
     setCache(cacheKey, responsePayload);
 

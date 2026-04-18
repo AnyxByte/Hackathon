@@ -5,6 +5,7 @@ import "./index.css";
 import App from "./App.jsx";
 import { Auth } from "./pages/Auth.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import { ChatProvider } from "../context/HistoryContext.jsx";
 
 const router = createBrowserRouter([
   {
@@ -17,7 +18,11 @@ const router = createBrowserRouter([
   },
   {
     path: "/dashboard",
-    element: <Dashboard />,
+    element: (
+      <ChatProvider>
+        <Dashboard />
+      </ChatProvider>
+    ),
   },
 ]);
 

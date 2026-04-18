@@ -7,6 +7,11 @@ const conversationSchema = new mongoose.Schema(
       required: true,
       ref: "user",
     },
+    sessionId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     lastDiseaseContext: {
       type: String,
     },
@@ -17,9 +22,22 @@ const conversationSchema = new mongoose.Schema(
           required: true,
           enum: ["user", "assistant"],
         },
-        content: {
-          required: true,
+        type: {
           type: String,
+          enum: ["text", "structured_report"],
+          default: "text", // Helps React know if it should render cards or just a chat bubble
+        },
+        content: {
+          type: String,
+          required: true, // Stores the user's query OR the AI's overview paragraph
+        },
+        publications: {
+          type: Array, // Stores the exact JSON array of top publications
+          default: [],
+        },
+        trials: {
+          type: Array, // Stores the exact JSON array of clinical trials
+          default: [],
         },
         timestamp: {
           type: Date,
@@ -32,5 +50,4 @@ const conversationSchema = new mongoose.Schema(
 );
 
 const Conversation = mongoose.model("conversation", conversationSchema);
-
 export default Conversation;

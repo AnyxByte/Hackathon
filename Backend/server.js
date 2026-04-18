@@ -3,6 +3,7 @@ import { connectDb } from "./utils/connectDb.js";
 import dotenv from "dotenv";
 import userRouter from "./routes/userRoutes.js";
 import queryRouter from "./routes/queryRoutes.js";
+import convoRouter from "./routes/convoRoutes.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { auth } from "./middlewares/auth.js";
@@ -35,7 +36,8 @@ app.get("/health", (req, res) => {
 
 //user routes
 app.use("/api/auth", userRouter);
-app.use("/api/v1", queryRouter);
+app.use("/api/v1", auth, queryRouter);
+app.use("/api/v1", auth, convoRouter);
 
 app.listen(port, () => {
   console.log(`server started at port ${port}`);

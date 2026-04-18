@@ -2,17 +2,20 @@ import React, { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import axios from "axios";
 import { User, Bot, Send, MapPin, BookOpen, Loader2 } from "lucide-react";
+import Cookies from "js-cookie";
 
 import { Sidebar } from "../../components/dashboard/Sidebar";
 import TrialCard from "../../components/dashboard/TrialCard";
 import PublicationCard from "../../components/dashboard/Publication";
 
+import { useChat } from "../../context/HistoryContext";
+
 const Dashboard = () => {
-  const [messages, setMessages] = useState([]);
+  const { messages, setMessages, currentSessionId } = useChat();
+
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef(null);
 
-  // react-hook-form setup
   const { register, handleSubmit, reset, watch } = useForm();
   const queryValue = watch("query");
 
@@ -24,20 +27,43 @@ const Dashboard = () => {
 
   const onSubmit = async (data) => {
     if (!data.query.trim()) return;
+    const token = Cookies.get("token");
 
-    // 1. Add User Message to UI
+    const historyPayload = messages.map((msg) => ({
+      role: msg.role,
+      content:
+        msg.type === "structured_report"
+          ? msg.overview || msg.content
+          : msg.content,
+    }));
+
+    // 2. Add User Message to UI
     const userMsg = { role: "user", content: data.query, type: "text" };
     setMessages((prev) => [...prev, userMsg]);
-    reset(); // Clear input
+    reset();
     setIsLoading(true);
 
+    console.log("data", {
+      query: data.query,
+      conversationHistory: historyPayload,
+      sessionId: currentSessionId,
+    });
+
     try {
-      // 2. API Call (Modify URL/Port as per your backend)
-      const response = await axios.post("http://localhost:3000/api/v1/query", {
-        query: data.query,
-        // Optional: Pass context if your backend expects it
-        context: { location: "Toronto, CA", disease: "Parkinson's" },
-      });
+      // 3. API Call
+      const response = await axios.post(
+        "http://localhost:3000/api/v1/query",
+        {
+          query: data.query,
+          conversationHistory: historyPayload,
+          sessionId: currentSessionId,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
 
       setMessages((prev) => [...prev, response.data]);
     } catch (error) {
@@ -125,7 +151,8 @@ const Dashboard = () => {
                           Condition Overview
                         </h3>
                         <p className="text-sm text-slate-600 leading-relaxed italic border-l-2 border-emerald-100 pl-4">
-                          "{msg.overview}"
+                          {/* ⚡ Handles both Live API (overview) and DB History (content) */}
+                          "{msg.overview || msg.content}"
                         </p>
                       </section>
 
@@ -140,7 +167,7 @@ const Dashboard = () => {
                         </div>
                       </section>
 
-                      {msg.trials && (
+                      {msg.trials && msg.trials.length > 0 && (
                         <section>
                           <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 ml-1">
                             Relevant Clinical Trials

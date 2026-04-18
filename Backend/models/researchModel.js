@@ -7,7 +7,7 @@ const researchSchema = new mongoose.Schema(
       required: true,
     },
     sessionId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       required: true,
       index: true,
     },
