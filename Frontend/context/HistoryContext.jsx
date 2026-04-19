@@ -32,35 +32,30 @@ export const ChatProvider = ({ children }) => {
         (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
       );
 
-      // ⚡ Get the current user ID to determine ownership
       const userStr = localStorage.getItem("user");
       const currentUser = userStr ? JSON.parse(userStr) : null;
-      // Depending on your auth, the ID might be _id or id
-      const currentUserId = currentUser
-        ? currentUser._id || currentUser.id
-        : null;
+
+      const currentUserId = currentUser ? currentUser._id : null;
 
       const owned = [];
       const shared = [];
 
-      // ⚡ Segregate the chats and attach the specific role
       sortedHistory.forEach((chat) => {
         if (chat.userId === currentUserId) {
           owned.push(chat);
         } else {
-          // Find my specific role in the sharedWith array
           const myShareInfo = chat.sharedWith.find(
             (s) => s.user === currentUserId,
           );
 
           shared.push({
             ...chat,
-            myRole: myShareInfo ? myShareInfo.role : "read", // Default to read if something goes wrong
+            myRole: myShareInfo ? myShareInfo.role : "read",
           });
         }
       });
 
-      setChatHistory(sortedHistory); // Keep the flat array for quick searching
+      setChatHistory(sortedHistory);
       setMyChats(owned);
       setSharedChats(shared);
     } catch (error) {

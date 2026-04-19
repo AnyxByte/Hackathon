@@ -8,12 +8,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Initialize Hugging Face Client
 const hf = new HfInference(process.env.HUGGINGFACE_TOKEN);
 
-// ─────────────────────────────────────────────
-// IN-MEMORY CACHE (30 min TTL)
-// ─────────────────────────────────────────────
 const queryCache = new Map();
 
 const getCacheKey = (disease, intent) =>
@@ -24,9 +20,6 @@ const setCache = (key, value) => {
   setTimeout(() => queryCache.delete(key), 1000 * 60 * 30);
 };
 
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
 const reconstructAbstract = (invertedIndex) => {
   if (!invertedIndex) return "";
   const wordPositions = [];
@@ -46,16 +39,12 @@ const cleanText = (textData) => {
   return String(textData);
 };
 
-// ─────────────────────────────────────────────
-// BM25-STYLE KEYWORD SCORER (UPGRADED)
-// ─────────────────────────────────────────────
 const keywordScore = (item, intentKeywords, diseaseKeywords) => {
   const titleText = item.title?.toLowerCase() || "";
   const abstractText = item.abstract?.toLowerCase() || "";
 
   let score = 0;
 
-  // ⚡ INTENT words get a massive 5x multiplier!
   for (const kw of intentKeywords) {
     const titleMatches = (titleText.match(new RegExp(kw, "g")) || []).length;
     const abstractMatches = (abstractText.match(new RegExp(kw, "g")) || [])
@@ -63,7 +52,6 @@ const keywordScore = (item, intentKeywords, diseaseKeywords) => {
     score += (titleMatches * 3 + abstractMatches) * 5;
   }
 
-  // Disease words get standard scoring
   for (const kw of diseaseKeywords) {
     const titleMatches = (titleText.match(new RegExp(kw, "g")) || []).length;
     const abstractMatches = (abstractText.match(new RegExp(kw, "g")) || [])
@@ -77,17 +65,13 @@ const keywordScore = (item, intentKeywords, diseaseKeywords) => {
   return score * 10 + recency;
 };
 
-// ─────────────────────────────────────────────
-// PHASE 1: Fetch from all APIs (FAULT-TOLERANT)
-// ─────────────────────────────────────────────
 export const testAllEndpoints = async (disease, intent) => {
   const query = `${intent} AND ${disease}`;
 
-  // ⚡ Helper function to prevent one failing API from crashing the others
   const fetchSafe = (promise, fallbackData, name) =>
     promise.catch((err) => {
       console.error(`⚠️ ${name} API Failed: ${err.message}`);
-      return { data: fallbackData }; // Returns empty mock data so the app survives
+      return { data: fallbackData }; 
     });
 
   try {
@@ -209,7 +193,7 @@ export const testAllEndpoints = async (disease, intent) => {
 
     const broadPool = [...pubmedPool, ...alexPool, ...trialPool];
     console.log(
-      `✅ Fetched: ${pubmedPool.length} PubMed | ${alexPool.length} OpenAlex | ${trialPool.length} Trials = ${broadPool.length} total`,
+      `Fetched: ${pubmedPool.length} PubMed | ${alexPool.length} OpenAlex | ${trialPool.length} Trials = ${broadPool.length} total`,
     );
     return broadPool;
   } catch (error) {
@@ -218,9 +202,6 @@ export const testAllEndpoints = async (disease, intent) => {
   }
 };
 
-// ─────────────────────────────────────────────
-// MAIN HANDLER
-// ─────────────────────────────────────────────
 export const handleQuery = async (req, res) => {
   const startTime = Date.now();
   const userId = req.user._id;
@@ -234,14 +215,10 @@ export const handleQuery = async (req, res) => {
 
     console.log(`\n🚀 Raw User Input: "${query}"`);
 
-    // ⚡ Generate sessionId EARLY so DB save can use it for cached hits
     const currentSessionId =
       sessionId || new mongoose.Types.ObjectId().toString();
 
-    // ─────────────────────────────────────────────
-    // 🧠 PHASE 0: NLP Query Extraction
-    // ─────────────────────────────────────────────
-    console.time("🧠 Phase 0: Extraction");
+    console.time("Phase 0: Extraction");
 
     const recentHistory = conversationHistory
       .slice(-3)
@@ -295,13 +272,9 @@ export const handleQuery = async (req, res) => {
       console.error("Extraction failed, falling back to raw query.", e.message);
     }
 
-    console.log(`✅ Extracted -> Disease: "${disease}" | Intent: "${intent}"`);
-    console.timeEnd("🧠 Phase 0: Extraction");
+    console.log(`Extracted -> Disease: "${disease}" | Intent: "${intent}"`);
+    console.timeEnd("Phase 0: Extraction");
 
-    // ─────────────────────────────────────────────
-    // 💾 DATABASE SAVE HELPER
-    // ─────────────────────────────────────────────
-    // This allows us to use your exact logic for both cached hits and new hits
     const saveInteractionToDb = async (overview, pubs, trials) => {
       const newUserMessage = { role: "user", type: "text", content: query };
       const newAiMessage = {
@@ -323,22 +296,18 @@ export const handleQuery = async (req, res) => {
           { upsert: true, new: true },
         );
         console.log(
-          `✅ Saved to DB. Chat contains ${updatedChat.messages.length} messages.`,
+          `Saved. Chat contains ${updatedChat.messages.length} messages.`,
         );
       } catch (err) {
-        console.error("❌ DB Save Error:", err);
+        console.error("DB Save Error:", err);
       }
     };
 
-    // ─────────────────────────────────────────────
-    // ⚡ CACHE CHECK
-    // ─────────────────────────────────────────────
     const cacheKey = getCacheKey(disease, intent);
     if (queryCache.has(cacheKey)) {
       console.log("⚡ Cache hit — returning instantly");
       const cachedData = queryCache.get(cacheKey);
 
-      // ⚡ Await the database save before responding so it doesn't vanish on reload!
       await saveInteractionToDb(
         cachedData.overview,
         cachedData.publications,
@@ -353,21 +322,15 @@ export const handleQuery = async (req, res) => {
       });
     }
 
-    // ─────────────────────────────────────────────
-    // 📥 PHASE 1: API Fetch
-    // ─────────────────────────────────────────────
-    console.time("📥 Phase 1: API Fetch");
+    console.time("Phase 1: API Fetch");
     const broadPool = await testAllEndpoints(disease, intent);
-    console.timeEnd("📥 Phase 1: API Fetch");
+    console.timeEnd("Phase 1: API Fetch");
 
     if (!broadPool.length) {
       return res.status(404).json({ msg: "No results found." });
     }
 
-    // ─────────────────────────────────────────────
-    // 🎯 PHASE 2: Upgraded Keyword Rank
-    // ─────────────────────────────────────────────
-    console.time("🎯 Phase 2: Keyword Rank");
+    console.time("Phase 2: Keyword Rank");
 
     const stopWords = new Set([
       "a",
@@ -423,14 +386,11 @@ export const handleQuery = async (req, res) => {
 
     const rankedDocs = [...topPublications, ...topTrials];
 
-    console.timeEnd("🎯 Phase 2: Keyword Rank");
+    console.timeEnd("Phase 2: Keyword Rank");
     console.log(
-      `✅ Top docs selected: ${topPublications.length} publications + ${topTrials.length} trials`,
+      `Top docs selected: ${topPublications.length} publications + ${topTrials.length} trials`,
     );
 
-    // ─────────────────────────────────────────────
-    // 💾 SECURE DB SAVE FOR RESEARCH (Awaited!)
-    // ─────────────────────────────────────────────
     try {
       await Research.insertMany(
         rankedDocs.map(({ _score, ...rest }) => ({
@@ -438,9 +398,9 @@ export const handleQuery = async (req, res) => {
           sessionId: currentSessionId,
         })),
       );
-      console.log("✅ Research documents safely secured in DB.");
+      console.log("Research documents saved.");
     } catch (err) {
-      console.error("❌ Background DB save error:", err);
+      console.error(" DB save error:", err);
     }
 
     const conversationContext =
@@ -474,10 +434,7 @@ CRITICAL RULE: If the exact answer (e.g., a specific dosage, side effect, or loc
 Do NOT list out the publications or trials. Just provide the analytical summary and cite your claims like [Source 1].
 Do NOT output markdown headers, just the plain text paragraph.`;
 
-    // ─────────────────────────────────────────────
-    // ✍️ PHASE 6: LLM Generation
-    // ─────────────────────────────────────────────
-    console.time("✍️ Phase 6: LLM");
+    console.time("Phase 6: LLM");
 
     const chatCompletion = await hf.chatCompletion({
       model: "meta-llama/Meta-Llama-3-8B-Instruct",
@@ -489,10 +446,10 @@ Do NOT output markdown headers, just the plain text paragraph.`;
     const llmText =
       chatCompletion.choices[0]?.message?.content || "Analysis complete.";
 
-    console.timeEnd("✍️ Phase 6: LLM");
+    console.timeEnd("Phase 6: LLM");
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`\n🎯 TOTAL: ${elapsed}s`);
+    console.log(`\nTOTAL: ${elapsed}s`);
 
     const responsePayload = {
       sessionId: currentSessionId,
@@ -503,10 +460,6 @@ Do NOT output markdown headers, just the plain text paragraph.`;
       trials: topTrials.map(({ _score, __v, ...rest }) => rest),
     };
 
-    // ─────────────────────────────────────────────
-    // 💾 AUTO-SAVE TO MONGODB (New DB Save)
-    // ─────────────────────────────────────────────
-    // ⚡ Await the database save before responding so it doesn't vanish on reload!
     await saveInteractionToDb(
       responsePayload.overview,
       responsePayload.publications,

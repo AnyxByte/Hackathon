@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { useChat } from "../../context/HistoryContext";
 import axios from "axios";
-// import ShareModal from "./ShareModal";
 import toast from "react-hot-toast";
 import ShareModal from "./ShareModel";
 
@@ -102,7 +101,6 @@ const Header = ({ setIsSidebarOpen, isLoading }) => {
             <MapPin size={10} /> {user?.location || "Unknown"}
           </span>
 
-          {/* ⚡ ONLY render the 3-dots menu if the user is the OWNER */}
           {isOwner && (
             <div className="relative" ref={menuRef}>
               <button
@@ -126,7 +124,6 @@ const Header = ({ setIsSidebarOpen, isLoading }) => {
                     Export as PDF
                   </button>
                   <div className="h-px bg-slate-100 my-1 mx-2" />{" "}
-                  {/* Divider */}
                   <button
                     onClick={handleShare}
                     className="w-full text-left px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
@@ -135,7 +132,6 @@ const Header = ({ setIsSidebarOpen, isLoading }) => {
                     Share Access
                   </button>
                   <div className="h-px bg-slate-100 my-1 mx-2" />{" "}
-                  {/* Divider */}
                   <button
                     onClick={handleDelete}
                     className="w-full text-left px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 flex items-center gap-2.5 transition-colors"

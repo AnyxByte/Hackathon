@@ -3,14 +3,13 @@ import { useForm } from "react-hook-form";
 import { Send, Mic, MicOff } from "lucide-react";
 
 const ChatInput = ({ onSendMessage, isLoading }) => {
-  // ⚡ Added setValue to manually update the input when speaking
+
   const { register, handleSubmit, reset, watch, setValue } = useForm();
   const queryValue = watch("query");
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
 
-  // ⚡ Initialize the Speech Recognition API on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition =

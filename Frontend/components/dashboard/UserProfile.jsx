@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X, User, MapPin, LogOut } from "lucide-react";
-import Cookies from "js-cookie"; // Ensure you have this installed/imported
+import Cookies from "js-cookie"; 
 import { useNavigate } from "react-router";
 
 const UserProfileModal = ({ isOpen, onClose, onSave }) => {
@@ -35,7 +35,6 @@ const UserProfileModal = ({ isOpen, onClose, onSave }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 md:p-5 border-b border-slate-100 bg-slate-50/50">
           <h2 className="text-base md:text-lg font-bold text-slate-800">
             Profile Settings
@@ -49,7 +48,6 @@ const UserProfileModal = ({ isOpen, onClose, onSave }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 md:p-6 space-y-6">
-          {/* Avatar & Plan Preview */}
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-emerald-500 text-white flex items-center justify-center text-2xl font-bold shadow-md">
               {formData.firstName[0]}
@@ -65,7 +63,6 @@ const UserProfileModal = ({ isOpen, onClose, onSave }) => {
             </div>
           </div>
 
-          {/* Form Fields */}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
@@ -128,9 +125,7 @@ const UserProfileModal = ({ isOpen, onClose, onSave }) => {
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-            {/* ⚡ Logout Button on the Left */}
             <button
               type="button"
               onClick={handleLogout}
@@ -140,7 +135,6 @@ const UserProfileModal = ({ isOpen, onClose, onSave }) => {
               Log Out
             </button>
 
-            {/* Cancel & Save on the Right */}
             <div className="flex items-center gap-3">
               <button
                 type="button"

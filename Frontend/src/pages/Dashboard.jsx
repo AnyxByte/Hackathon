@@ -100,7 +100,6 @@ const Dashboard = () => {
       <main className="flex-1 flex flex-col h-full relative overflow-hidden w-full">
         <Header isLoading={isLoading} setIsSidebarOpen={setIsSidebarOpen} />
 
-        {/* Chat Feed */}
         <div className="flex-1 overflow-y-auto pt-4 md:pt-8 pb-40">
           <div className="max-w-4xl mx-auto px-4 md:px-6 space-y-8 md:space-y-12">
             {messages.length === 0 && (
@@ -140,7 +139,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Input Form */}
         {!isReadOnly ? (
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
         ) : (

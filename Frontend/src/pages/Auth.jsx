@@ -21,7 +21,6 @@ export const Auth = () => {
   const navigate = useNavigate();
   const apiUrl = import.meta.env.VITE_API_URL;
 
-  // Initialize React Hook Form
   const {
     register,
     handleSubmit,
@@ -49,7 +48,6 @@ export const Auth = () => {
         isLogin ? "Welcome back!" : "Account created successfully!",
       );
 
-      // Store token in localStorage
       localStorage.setItem("token", response.data.token);
       Cookies.set("token", response.data.token);
 
@@ -67,13 +65,12 @@ export const Auth = () => {
 
   const toggleAuthMode = () => {
     setIsLogin(!isLogin);
-    reset(); // Clear form fields when switching
+    reset();
   };
 
   return (
     <>
       <div className="min-h-screen flex items-stretch bg-white font-sans">
-        {/* --- Left Side: Branding (Hidden on Mobile) --- */}
         <div className="hidden lg:flex w-1/2 bg-slate-900 relative overflow-hidden items-center justify-center p-12">
           <div className="absolute top-0 left-0 w-full h-full opacity-30">
             <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-500 rounded-full blur-[120px]"></div>
@@ -105,7 +102,6 @@ export const Auth = () => {
           </div>
         </div>
 
-        {/* --- Right Side: Auth Form --- */}
         <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-16 bg-slate-50">
           <div className="w-full max-w-md">
             <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
@@ -159,10 +155,10 @@ export const Auth = () => {
                 />
                 <input
                   {...register("email", {
-                    required: "Email is required", // Ensure this string is here
+                    required: "Email is required",
                   })}
                   type="email"
-                  autoComplete="email" // Added for better browser handling
+                  autoComplete="email"
                   placeholder="Medical Email Address"
                   className={`w-full pl-11 pr-4 py-3 bg-white border ${
                     errors.email ? "border-red-400" : "border-slate-200"

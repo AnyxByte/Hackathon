@@ -56,7 +56,6 @@ export const HomeDashboard = () => {
               </div>
             </div>
 
-            {/* Mockup Dashboard */}
             <div className="lg:w-1/2 w-full">
               <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden aspect-square md:aspect-video lg:aspect-square flex flex-col">
                 <div className="bg-slate-900 p-4 flex items-center gap-2">
@@ -70,9 +69,9 @@ export const HomeDashboard = () => {
                   </div>
                 </div>
                 <div className="flex-1 p-6 space-y-4 overflow-y-auto">
-                  {/* AI Message */}
+
                   <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded bg-emerald-500 flex-shrink-0 flex items-center justify-center text-white font-bold text-xs italic">
+                    <div className="w-8 h-8 rounded bg-emerald-500 shrink-0 flex items-center justify-center text-white font-bold text-xs italic">
                       C
                     </div>
                     <div className="bg-slate-100 p-4 rounded-2xl rounded-tl-none text-sm text-slate-800 max-w-[80%]">
@@ -82,7 +81,6 @@ export const HomeDashboard = () => {
                       your area:
                     </div>
                   </div>
-                  {/* Trial Card */}
                   <div className="ml-11 border border-emerald-200 bg-emerald-50/50 p-4 rounded-xl">
                     <div className="flex justify-between items-start mb-2">
                       <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">

@@ -15,7 +15,6 @@ export const Pipeline = () => {
         </div>
 
         <div className="grid md:grid-cols-4 gap-8 relative">
-          {/* Connecting Line (Desktop) */}
           <div className="hidden md:block absolute top-1/2 left-0 w-full h-0.5 bg-slate-100 -z-10"></div>
 
           {[
@@ -55,7 +54,6 @@ export const Pipeline = () => {
               hover:-translate-y-2 hover:shadow-xl hover:shadow-slate-200/50 
               cursor-default group ${item.color}`}
             >
-              {/* Icon Container with group-hover effect */}
               <div
                 className="w-12 h-12 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center mb-5 
                   transition-all duration-300 group-hover:bg-emerald-100 group-hover:text-emerald-600 group-hover:scale-110"
@@ -76,8 +74,7 @@ export const Pipeline = () => {
                 {item.desc}
               </p>
 
-              {/* Subtle bottom accent line that appears on hover */}
-              <div className="absolute bottom-0 left-0 w-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-300 group-hover:w-full rounded-b-2xl"></div>
+              <div className="absolute bottom-0 left-0 w-0 h-1 bg-linear-to-r from-emerald-400 to-emerald-600 transition-all duration-300 group-hover:w-full rounded-b-2xl"></div>
             </div>
           ))}
         </div>

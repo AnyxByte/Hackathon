@@ -34,7 +34,6 @@ const ShareModal = ({ isOpen, onClose, onShare }) => {
     }
   }, [isOpen, apiUrl]);
 
-  // Close dropdown if clicked outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -82,7 +81,6 @@ const ShareModal = ({ isOpen, onClose, onShare }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-visible animate-in zoom-in-95 duration-200 flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 md:p-5 border-b border-slate-100">
           <h2 className="text-base md:text-lg font-bold text-slate-800 flex items-center gap-2">
             <Shield size={18} className="text-emerald-500" />
@@ -97,7 +95,6 @@ const ShareModal = ({ isOpen, onClose, onShare }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 md:p-6 space-y-6 flex-1">
-          {/* Searchable Dropdown */}
           <div className="space-y-1.5 relative" ref={dropdownRef}>
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
               <span>Search Colleague</span>
@@ -125,13 +122,12 @@ const ShareModal = ({ isOpen, onClose, onShare }) => {
               />
             </div>
 
-            {/* Dropdown Menu */}
             {isDropdownOpen && searchQuery && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                 {filteredUsers.length > 0 ? (
                   filteredUsers.map((user) => (
                     <div
-                      key={user._id || user.id} // MongoDB uses _id
+                      key={user._id || user.id} 
                       onClick={() => handleSelectUser(user)}
                       className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer flex items-center gap-3 transition-colors border-b border-slate-50 last:border-0"
                     >
