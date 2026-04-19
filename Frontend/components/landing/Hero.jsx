@@ -12,7 +12,7 @@ function Hero() {
         <div className="max-w-7xl mx-auto px-4 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800 border border-slate-700 text-emerald-400 text-sm mb-8 animate-fade-in">
             <Zap size={16} />
-            <span>Hackathon Prototype: MERN + Open Source LLM</span>
+            <span>Hackathon Project: MERN + Open Source LLM</span>
           </div>
           <h1 className="text-5xl md:text-7xl font-extrabold text-white mb-6 tracking-tight">
             Medical Research, <br />

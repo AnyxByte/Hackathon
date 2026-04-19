@@ -67,7 +67,6 @@ const ChatSection = ({
   );
 };
 
-// --- ⚡ 3. Main Sidebar Component ---
 export const Sidebar = ({ isOpen, setIsOpen }) => {
   const {
     myChats,
