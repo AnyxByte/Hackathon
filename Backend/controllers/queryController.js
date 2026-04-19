@@ -254,6 +254,8 @@ export const handleQuery = async (req, res) => {
     1. Identify the primary disease/condition being discussed. (If none, return "General").
     2. Identify the specific subject/focus of the query (e.g., exact drug names, supplements, procedures).
     CRITICAL: DO NOT categorize the intent. Extract the actual specific words the user typed.
+    CRITICAL CONTEXT RULE: If the Current Input uses pronouns (e.g., "it", "those", "this diet") or refers to a previous topic, you MUST look at the Recent Conversation History and include the original disease, drug, or topic in your extracted JSON.
+    
     RESPOND STRICTLY WITH ONLY A RAW JSON OBJECT. No markdown, no backticks, no explanations.
     
     Example 1:
