@@ -15,12 +15,18 @@ const Dashboard = () => {
     currentSessionId,
     fetchChatHistory,
     setChatHistory,
+    sharedChats,
   } = useChat();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const scrollRef = useRef(null);
   const apiUrl = import.meta.env.VITE_API_URL;
+
+  const currentSharedChat = sharedChats?.find(
+    (c) => c.sessionId === currentSessionId,
+  );
+  const isReadOnly = currentSharedChat?.myRole === "read";
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -135,7 +141,13 @@ const Dashboard = () => {
         </div>
 
         {/* Input Form */}
-        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+        {!isReadOnly ? (
+          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+        ) : (
+          <div className="flex items-center justify-center gap-2 py-4 bg-slate-200/50 backdrop-blur-md border border-slate-300 rounded-2xl text-slate-500 text-sm font-medium">
+            You are viewing this research in read-only mode.
+          </div>
+        )}
       </main>
     </div>
   );

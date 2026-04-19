@@ -138,3 +138,20 @@ export const updateUser = async (req, res) => {
     });
   }
 };
+
+export const fetchAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({});
+
+    return res.status(200).json({
+      msg: "all users fetched",
+      users,
+    });
+  } catch (error) {
+    console.error("fetchAllUsers Error:", error);
+    return res.status(500).json({
+      msg: "Server error",
+      error: error.message,
+    });
+  }
+};

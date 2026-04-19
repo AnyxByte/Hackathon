@@ -7,6 +7,24 @@ const conversationSchema = new mongoose.Schema(
       required: true,
       ref: "user",
     },
+    sharedWith: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "user",
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ["read", "write"],
+          default: "read",
+        },
+        addedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     sessionId: {
       type: String,
       required: true,
@@ -25,18 +43,18 @@ const conversationSchema = new mongoose.Schema(
         type: {
           type: String,
           enum: ["text", "structured_report"],
-          default: "text", // Helps React know if it should render cards or just a chat bubble
+          default: "text",
         },
         content: {
           type: String,
-          required: true, // Stores the user's query OR the AI's overview paragraph
+          required: true,
         },
         publications: {
-          type: Array, // Stores the exact JSON array of top publications
+          type: Array,
           default: [],
         },
         trials: {
-          type: Array, // Stores the exact JSON array of clinical trials
+          type: Array,
           default: [],
         },
         timestamp: {

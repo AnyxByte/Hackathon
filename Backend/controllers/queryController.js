@@ -47,9 +47,6 @@ const cleanText = (textData) => {
 };
 
 // ─────────────────────────────────────────────
-// BM25-STYLE KEYWORD SCORER
-// ─────────────────────────────────────────────
-// ─────────────────────────────────────────────
 // BM25-STYLE KEYWORD SCORER (UPGRADED)
 // ─────────────────────────────────────────────
 const keywordScore = (item, intentKeywords, diseaseKeywords) => {
@@ -80,9 +77,6 @@ const keywordScore = (item, intentKeywords, diseaseKeywords) => {
   return score * 10 + recency;
 };
 
-// ─────────────────────────────────────────────
-// PHASE 1: Fetch from all APIs
-// ─────────────────────────────────────────────
 // ─────────────────────────────────────────────
 // PHASE 1: Fetch from all APIs (FAULT-TOLERANT)
 // ─────────────────────────────────────────────
@@ -240,6 +234,10 @@ export const handleQuery = async (req, res) => {
 
     console.log(`\n🚀 Raw User Input: "${query}"`);
 
+    // ⚡ Generate sessionId EARLY so DB save can use it for cached hits
+    const currentSessionId =
+      sessionId || new mongoose.Types.ObjectId().toString();
+
     // ─────────────────────────────────────────────
     // 🧠 PHASE 0: NLP Query Extraction
     // ─────────────────────────────────────────────
@@ -250,26 +248,28 @@ export const handleQuery = async (req, res) => {
       .map((m) => `${m.role === "user" ? "User" : "CuraLink"}: ${m.content}`)
       .join("\n");
 
-    const extractionPrompt = `You are a strict medical data extractor. 
-    
-    Recent Conversation History:
-    ${recentHistory || "None"}
-
-    Current User Query: "${query}"
+    const extractionPrompt = `You are a strict medical data extractor.
     
     Task:
     1. Identify the primary disease/condition being discussed. (If none, return "General").
-    2. Identify the specific subject/focus of the query (e.g., exact drug names, supplements, procedures, or specific symptoms). 
-    CRITICAL: DO NOT categorize the intent (e.g., never output generic words like "treatment" or "drug"). Extract the actual specific words the user typed.
-    
+    2. Identify the specific subject/focus of the query (e.g., exact drug names, supplements, procedures).
+    CRITICAL: DO NOT categorize the intent. Extract the actual specific words the user typed.
     RESPOND STRICTLY WITH ONLY A RAW JSON OBJECT. No markdown, no backticks, no explanations.
     
-    Example Input: "Can I take Vitamin D in lung cancer?"
-    Example Output: {"disease": "lung cancer", "intent": "Vitamin D"}
+    Example 1:
+    Input: "Can I take Vitamin D in lung cancer?"
+    Output: {"disease": "lung cancer", "intent": "Vitamin D"}
     
-    Example Input: "What are the side effects of chemotherapy?"
-    Example Output: {"disease": "General", "intent": "chemotherapy side effects"}
-    `;
+    Example 2:
+    Input: "What are the side effects of chemotherapy?"
+    Output: {"disease": "General", "intent": "chemotherapy side effects"}
+    
+    ---
+    Recent Conversation History:
+    ${recentHistory || "None"}
+
+    Current Input: "${query}"
+    Output:`;
 
     let disease = "General";
     let intent = query;
@@ -296,19 +296,64 @@ export const handleQuery = async (req, res) => {
     console.log(`✅ Extracted -> Disease: "${disease}" | Intent: "${intent}"`);
     console.timeEnd("🧠 Phase 0: Extraction");
 
+    // ─────────────────────────────────────────────
+    // 💾 DATABASE SAVE HELPER
+    // ─────────────────────────────────────────────
+    // This allows us to use your exact logic for both cached hits and new hits
+    const saveInteractionToDb = async (overview, pubs, trials) => {
+      const newUserMessage = { role: "user", type: "text", content: query };
+      const newAiMessage = {
+        role: "assistant",
+        type: "structured_report",
+        content: overview,
+        publications: pubs,
+        trials: trials,
+      };
+
+      try {
+        const updatedChat = await Conversation.findOneAndUpdate(
+          { sessionId: currentSessionId },
+          {
+            $setOnInsert: { userId: userId },
+            $set: { lastDiseaseContext: disease },
+            $push: { messages: { $each: [newUserMessage, newAiMessage] } },
+          },
+          { upsert: true, new: true },
+        );
+        console.log(
+          `✅ Saved to DB. Chat contains ${updatedChat.messages.length} messages.`,
+        );
+      } catch (err) {
+        console.error("❌ DB Save Error:", err);
+      }
+    };
+
+    // ─────────────────────────────────────────────
+    // ⚡ CACHE CHECK
+    // ─────────────────────────────────────────────
     const cacheKey = getCacheKey(disease, intent);
     if (queryCache.has(cacheKey)) {
       console.log("⚡ Cache hit — returning instantly");
+      const cachedData = queryCache.get(cacheKey);
+
+      // ⚡ Await the database save before responding so it doesn't vanish on reload!
+      await saveInteractionToDb(
+        cachedData.overview,
+        cachedData.publications,
+        cachedData.trials,
+      );
+
       return res.status(200).json({
-        ...queryCache.get(cacheKey),
+        ...cachedData,
+        sessionId: currentSessionId,
         cached: true,
         timeTaken: "0s",
       });
     }
 
-    const currentSessionId =
-      sessionId || new mongoose.Types.ObjectId().toString();
-
+    // ─────────────────────────────────────────────
+    // 📥 PHASE 1: API Fetch
+    // ─────────────────────────────────────────────
     console.time("📥 Phase 1: API Fetch");
     const broadPool = await testAllEndpoints(disease, intent);
     console.timeEnd("📥 Phase 1: API Fetch");
@@ -345,7 +390,6 @@ export const handleQuery = async (req, res) => {
       "this",
     ]);
 
-    // ⚡ Split Intent and Disease into separate arrays for weighted scoring
     const intentKeywords = [
       ...new Set(intent.toLowerCase().split(/\s+/)),
     ].filter((k) => !stopWords.has(k) && k.trim() !== "");
@@ -382,12 +426,20 @@ export const handleQuery = async (req, res) => {
       `✅ Top docs selected: ${topPublications.length} publications + ${topTrials.length} trials`,
     );
 
-    Research.insertMany(
-      rankedDocs.map(({ _score, ...rest }) => ({
-        ...rest,
-        sessionId: currentSessionId,
-      })),
-    ).catch((err) => console.error("Background DB save error:", err));
+    // ─────────────────────────────────────────────
+    // 💾 SECURE DB SAVE FOR RESEARCH (Awaited!)
+    // ─────────────────────────────────────────────
+    try {
+      await Research.insertMany(
+        rankedDocs.map(({ _score, ...rest }) => ({
+          ...rest,
+          sessionId: currentSessionId,
+        })),
+      );
+      console.log("✅ Research documents safely secured in DB.");
+    } catch (err) {
+      console.error("❌ Background DB save error:", err);
+    }
 
     const conversationContext =
       conversationHistory.length > 0
@@ -403,15 +455,10 @@ export const handleQuery = async (req, res) => {
     const docContext = rankedDocs
       .map(
         (doc, i) =>
-          `[Source ${i + 1}]
-Title: ${doc.title}
-Year: ${doc.year || "N/A"} | Source: ${doc.source} | Authors: ${doc.authors?.join(", ") || "N/A"}
-Abstract: ${doc.abstract?.slice(0, 300)}
-URL: ${doc.url}${doc.status ? `\nStatus: ${doc.status}` : ""}${doc.location ? ` | Location: ${doc.location}` : ""}${doc.contact ? `\nContact: ${doc.contact}` : ""}${doc.eligibilityCriteria ? `\nEligibility: ${doc.eligibilityCriteria?.slice(0, 200)}` : ""}`,
+          `[Source ${i + 1}]\nTitle: ${doc.title}\nYear: ${doc.year || "N/A"} | Source: ${doc.source} | Authors: ${doc.authors?.join(", ") || "N/A"}\nAbstract: ${doc.abstract?.slice(0, 300)}\nURL: ${doc.url}${doc.status ? `\nStatus: ${doc.status}` : ""}${doc.location ? ` | Location: ${doc.location}` : ""}${doc.contact ? `\nContact: ${doc.contact}` : ""}${doc.eligibilityCriteria ? `\nEligibility: ${doc.eligibilityCriteria?.slice(0, 200)}` : ""}`,
       )
       .join("\n\n---\n\n");
 
-    // ⚡ ADDED CRITICAL ESCAPE HATCH TO PROMPT
     const finalPrompt = `You are CuraLink, an expert Medical Research AI.
 ${conversationContext}Patient Disease: ${disease}
 Research Query: ${intent}
@@ -455,31 +502,14 @@ Do NOT output markdown headers, just the plain text paragraph.`;
     };
 
     // ─────────────────────────────────────────────
-    // 💾 AUTO-SAVE TO MONGODB
+    // 💾 AUTO-SAVE TO MONGODB (New DB Save)
     // ─────────────────────────────────────────────
-    const newUserMessage = {
-      role: "user",
-      type: "text",
-      content: query,
-    };
-
-    const newAiMessage = {
-      role: "assistant",
-      type: "structured_report",
-      content: llmText.trim(),
-      publications: responsePayload.publications,
-      trials: responsePayload.trials,
-    };
-
-    Conversation.findOneAndUpdate(
-      { sessionId: currentSessionId },
-      {
-        $setOnInsert: { userId: userId },
-        $set: { lastDiseaseContext: disease },
-        $push: { messages: { $each: [newUserMessage, newAiMessage] } },
-      },
-      { upsert: true, returnDocument: "after" }, // ⚡ Removed the warning
-    ).catch((err) => console.error("❌ DB Save Error:", err));
+    // ⚡ Await the database save before responding so it doesn't vanish on reload!
+    await saveInteractionToDb(
+      responsePayload.overview,
+      responsePayload.publications,
+      responsePayload.trials,
+    );
 
     setCache(cacheKey, responsePayload);
 
