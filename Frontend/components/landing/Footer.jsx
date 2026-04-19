@@ -23,8 +23,7 @@ export const Footer = () => {
           </a>
         </div>
         <div className="text-slate-500 text-xs text-center">
-          © 2026 Curalink AI. Hackathon Prototype. Built for Medical
-          Advancement.
+          © 2026 Curalink AI.
         </div>
       </div>
     </footer>

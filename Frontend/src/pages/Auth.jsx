@@ -239,13 +239,6 @@ export const Auth = () => {
                 {isLogin ? "Sign up for free" : "Log in here"}
               </button>
             </p>
-
-            <div className="mt-12 text-center">
-              <p className="text-[10px] text-slate-400 max-w-xs mx-auto leading-relaxed italic">
-                Curalink is a HIPAA-compliant medical research interface. Secure
-                authentication is powered by AES-256 encryption.
-              </p>
-            </div>
           </div>
         </div>
       </div>
